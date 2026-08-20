@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dsh-src · 探索图</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --grid: #f0f0f0;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+  --card-shadow: 0 1px 3px rgba(0,0,0,.06);
+  --text: #1f2937;
+  --muted: #6b7280;
+  --blue: #3b82f6;
+  --blue-bg: #eff6ff;
+  --amber: #f59e0b;
+  --amber-bg: #fffbeb;
+  --green: #10b981;
+  --green-bg: #ecfdf5;
+  --red: #ef4444;
+  --red-bg: #fef2f2;
+  --gray: #9ca3af;
+  --gray-bg: #f9fafb;
+  --edge: #d1d5db;
+  --edge-label-bg: #ffffff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.5 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* ── 顶栏 ── */
+.header {
+  padding: 14px 20px 10px;
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+.header-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.header-url {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--blue);
+  text-decoration: none;
+  word-break: break-all;
+}
+.header-platform {
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--gray-bg);
+  border: 1px solid var(--card-border);
+  padding: 1px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.header-purpose {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.header-meta .stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.header-meta .stat b {
+  color: var(--text);
+  font-weight: 600;
+}
+.header-auth {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+/* ── 标签页 ── */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--card-border);
+  padding: 0 20px;
+  flex-shrink: 0;
+  background: var(--bg);
+}
+.tab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+.tab .count {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--gray-bg);
+  color: var(--muted);
+}
+.tab.active .count {
+  background: var(--blue-bg);
+  color: var(--blue);
+}
+/* ── 画布 ── */
+.canvas-wrap {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  background-image: radial-gradient(circle, var(--grid) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+.canvas {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+.canvas svg.edges {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+}
+.canvas svg.edges path {
+  fill: none;
+  stroke: var(--edge);
+  stroke-width: 1.5;
+}
+.canvas svg.edges path.highlight {
+  stroke: var(--blue);
+  stroke-width: 2;
+}
+.canvas svg.edges .edge-label {
+  font-size: 10px;
+  fill: var(--muted);
+  text-anchor: middle;
+}
+.canvas svg.edges .edge-label-bg {
+  fill: var(--edge-label-bg);
+  rx: 3;
+}
+/* ── 节点卡片 ── */
+.node {
+  position: absolute;
+  width: 240px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  box-shadow: var(--card-shadow);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: box-shadow .15s, border-color .15s;
+  user-select: none;
+}
+.node:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,.1);
+  border-color: #d1d5db;
+}
+.node.highlight {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,.15);
+}
+.node {
+  cursor: grab;
+  touch-action: none;
+}
+.node.dragging {
+  cursor: grabbing;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  border-color: var(--blue);
+  z-index: 10;
+  opacity: .92;
+}
+.node-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.node-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.node-body {
+  flex: 1;
+  min-width: 0;
+}
+.node-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+  word-break: break-all;
+}
+.node-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.4;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.node-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.badge-goal { background: var(--blue-bg); color: var(--blue); }
+.badge-asset { background: var(--gray-bg); color: var(--muted); border: 1px solid var(--card-border); }
+.badge-intent { background: var(--amber-bg); color: #b45309; }
+.badge-fact { background: var(--green-bg); color: #047857; }
+.badge-finding { background: var(--red-bg); color: var(--red); }
+.badge-in-scope { background: var(--green-bg); color: #047857; }
+.badge-out-of-scope { background: var(--red-bg); color: var(--red); }
+.badge-confirmed { background: var(--green-bg); color: #047857; }
+.badge-candidate { background: var(--amber-bg); color: #b45309; }
+.badge-disproved { background: var(--gray-bg); color: var(--muted); }
+.badge-high { background: var(--red-bg); color: var(--red); }
+.badge-critical { background: #fdf2f8; color: #db2777; }
+.badge-medium { background: var(--amber-bg); color: #b45309; }
+.badge-low { background: var(--gray-bg); color: var(--muted); }
+/* 节点类型左边框 */
+.node.type-goal { border-left: 3px solid var(--blue); }
+.node.type-asset { border-left: 3px solid var(--gray); }
+.node.type-intent { border-left: 3px solid var(--amber); }
+.node.type-fact { border-left: 3px solid var(--green); }
+.node.type-finding { border-left: 3px solid var(--red); }
+/* 图标背景 */
+.node.type-goal .node-icon { background: var(--blue-bg); }
+.node.type-asset .node-icon { background: var(--gray-bg); }
+.node.type-intent .node-icon { background: var(--amber-bg); }
+.node.type-fact .node-icon { background: var(--green-bg); }
+.node.type-finding .node-icon { background: var(--red-bg); }
+/* ── 列表视图（漏洞/资产/报告 tab）── */
+.list-view {
+  padding: 20px;
+  max-width: 900px;
+}
+.list-item {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--card-shadow);
+}
+.list-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.list-item-body {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.list-item-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+/* ── 详情弹层 ── */
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.25);
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.detail-overlay.show { display: flex; }
+.detail-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.15);
+  width: 480px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.detail-card h3 {
+  font-size: 16px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-card .detail-row {
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.detail-card .detail-row .label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 2px;
+}
+.detail-card .detail-row .value {
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.detail-close {
+  float: right;
+  border: none;
+  background: none;
+  font-size: 18px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+.detail-close:hover { color: var(--text); }
+/* ── 重置布局按钮 ── */
+.reset-layout {
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--gray-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+.reset-layout:hover {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <a class="header-url" id="hdr-url" href="#" target="_blank" rel="noopener">—</a>
+    <span class="header-platform" id="hdr-platform"></span>
+    <button class="reset-layout" id="reset-layout" title="清除手动拖动的位置，恢复自动布局">⟲ 重置布局</button>
+  </div>
+  <div class="header-purpose" id="hdr-purpose"></div>
+  <div class="header-meta" id="hdr-meta"></div>
+  <div class="header-auth" id="hdr-auth"></div>
+</div>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-tab="graph">🕸️ 探索链路</button>
+  <button class="tab" data-tab="findings">🐛 漏洞 <span class="count" id="cnt-findings">0</span></button>
+  <button class="tab" data-tab="assets">📦 资产 <span class="count" id="cnt-assets">0</span></button>
+  <button class="tab" data-tab="report">📄 报告</button>
+</div>
+
+<div class="canvas-wrap" id="canvas-wrap">
+  <div class="canvas" id="canvas"></div>
+</div>
+
+<div class="detail-overlay" id="detail-overlay">
+  <div class="detail-card" id="detail-card"></div>
+</div>
+
+<script>
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const ICONS = { goal: '🎯', asset: '🌐', intent: '🎯', fact: '📋', finding: '🐛' };
+const EDGE_LABELS = { parent: '包含', spawns: '测试', yields: '发现', proves: '证实' };
+
+let DATA = { sessions: [] };
+let ACTIVE = new URLSearchParams(location.search).get('session') || '';
+let CURRENT_TAB = 'graph';
+
+// ── 拖拽状态 ──
+const customPositions = new Map();  // 用户手动拖动的位置（跨 refresh 持久化）
+let currentPositions = new Map();   // 当前渲染用的位置（computed + custom 合并）
+let layoutInfo = null;              // { padX, padTop, nodeW, nodeH, children }
+let dragState = null;               // 当前拖拽状态
+let highlightedNode = null;         // 当前高亮的节点
+let justDragged = false;            // 刚完成拖拽（用于抑制 click 事件）
+
+// ── 数据获取 ──
+async function refresh() {
+  // 拖拽进行中不重渲染，避免节点位置被自动布局覆盖
+  if (dragState) return;
+  try {
+    const r = await fetch('/src-graph-api', { cache: 'no-store' });
+    if (!r.ok) throw Error(r.status);
+    DATA = await r.json();
+    // embed 模式（?session=xxx）：只显示该会话的数据，不回退到第一个会话
+    // standalone 模式（无 session 参数）：自动选择第一个会话
+    if (!ACTIVE && DATA.sessions.length) ACTIVE = DATA.sessions[0].id;
+    render();
+  } catch (e) {
+    document.getElementById('canvas').innerHTML = '<div class="empty-state">数据加载失败</div>';
+  }
+}
+
+// ── 树构建 ──
+function buildTree(session) {
+  const nodes = new Map();
+  const children = new Map();
+
+  // 根节点
+  const goalId = 'goal';
+  nodes.set(goalId, {
+    id: goalId, type: 'goal',
+    title: session.scope[0] || session.platform || '目标',
+    sub: session.authorization ? session.authorization.slice(0, 80) : '',
+    badges: [{ text: session.platform, cls: 'badge-goal' }],
+    raw: { scope: session.scope, authorization: session.authorization },
+  });
+
+  // 资产
+  for (const a of session.assets || []) {
+    nodes.set(a.id, {
+      id: a.id, type: 'asset',
+      title: a.value,
+      sub: a.note || a.type,
+      badges: [
+        { text: a.scopeStatus === 'in-scope' ? '在范围内' : '范围外', cls: a.scopeStatus === 'in-scope' ? 'badge-in-scope' : 'badge-out-of-scope' },
+      ],
+      raw: a,
+    });
+    const pid = a.parentId || goalId;
+    if (!children.has(pid)) children.set(pid, []);
+    children.get(pid).push({ id: a.id, edgeType: 'parent' });
+  }
+
+  // 意图
+  for (const i of session.intents || []) {
+    nodes.set(i.id, {
+      id: i.id, type: 'intent',
+      title: i.method || '测试意图',
+      sub: i.target,
+      badges: [{ text: statusLabel(i.status), cls: 'badge-' + i.status }],
+      raw: i,
+    });
+    const pid = i.assetId || goalId;
+    if (!children.has(pid)) children.set(pid, []);
+    children.get(pid).push({ id: i.id, edgeType: 'spawns' });
+  }
+
+  // 事实
+  for (const f of session.facts || []) {
+    nodes.set(f.id, {
+      id: f.id, type: 'fact',
+      title: factKindLabel(f.kind),
+      sub: f.detail,
+      badges: [{ text: confLabel(f.confidence), cls: 'badge-' + f.confidence }],
+      raw: f,
+    });
+    const pid = f.intentId || goalId;
+    if (!children.has(pid)) children.set(pid, []);
+    children.get(pid).push({ id: f.id, edgeType: 'yields' });
+  }
+
+  // 漏洞
+  for (const f of session.findings || []) {
+    nodes.set(f.id, {
+      id: f.id, type: 'finding',
+      title: f.title,
+      sub: f.description,
+      badges: [{ text: sevLabel(f.severity), cls: 'badge-' + f.severity }],
+      raw: f,
+    });
+    // finding 挂到 intent 下（如果 fact 存在则挂 fact 下）
+    let pid = f.intentId || goalId;
+    const fact = (session.facts || []).find(x => x.intentId === f.intentId && x.confidence === 'confirmed');
+    if (fact) pid = fact.id;
+    if (!children.has(pid)) children.set(pid, []);
+    children.get(pid).push({ id: f.id, edgeType: 'proves' });
+  }
+
+  return { nodes, children, rootId: goalId };
+}
+
+function statusLabel(s) {
+  return { confirmed: '已确认', candidate: '候选', disproved: '已排除', planned: '计划中', 'in-progress': '进行中' }[s] || s;
+}
+function confLabel(c) {
+  return { confirmed: '已确认', candidate: '候选', disproved: '已排除' }[c] || c;
+}
+function factKindLabel(k) {
+  return { 'vuln-candidate': '漏洞候选', evidence: '证据', observation: '观察', negative: '反证' }[k] || k;
+}
+function sevLabel(s) {
+  return { critical: '严重', high: '高危', medium: '中危', low: '低危' }[s] || s;
+}
+
+// ── 树布局 ──
+function computeLayout(tree) {
+  const { nodes, children, rootId } = tree;
+  const NODE_W = 240, NODE_H = 76;
+  const H_GAP = 24, V_GAP = 48;
+  const positions = new Map();
+
+  function subtreeLeafCount(id) {
+    const kids = children.get(id) || [];
+    if (!kids.length) return 1;
+    return kids.reduce((s, k) => s + subtreeLeafCount(k.id), 0);
+  }
+
+  let nextCol = 0;
+  function assign(id, level) {
+    const kids = children.get(id) || [];
+    if (!kids.length) {
+      positions.set(id, { col: nextCol, level });
+      nextCol++;
+    } else {
+      const start = nextCol;
+      for (const k of kids) assign(k.id, level + 1);
+      positions.set(id, { col: (start + nextCol - 1) / 2, level });
+    }
+  }
+  assign(rootId, 0);
+
+  // 转像素
+  const result = new Map();
+  for (const [id, pos] of positions) {
+    result.set(id, {
+      x: pos.col * (NODE_W + H_GAP),
+      y: pos.level * (NODE_H + V_GAP),
+      w: NODE_W, h: NODE_H,
+    });
+  }
+  return { positions: result, nodeW: NODE_W, nodeH: NODE_H, hGap: H_GAP, vGap: V_GAP };
+}
+
+// ── 渲染 ──
+function render() {
+  const session = DATA.sessions.find(x => x.id === ACTIVE);
+  const canvas = document.getElementById('canvas');
+  const hdr = document.querySelector('.header');
+  const tabs = document.getElementById('tabs');
+
+  if (!session) {
+    // embed 模式（?session=xxx）：当前会话还没有 SRC 数据
+    if (ACTIVE) {
+      hdr.style.display = 'none';
+      tabs.style.display = 'none';
+      canvas.innerHTML = `<div class="empty-state" style="padding:80px 20px">
+        <div style="font-size:32px;margin-bottom:12px">🛡️</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">当前会话暂无 SRC 探索数据</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.8">在对话中让 Agent 调用 <code>src_start_engagement</code> 登记授权范围<br>之后这里会实时展示「目标 → 资产 → 意图 → 事实 → 漏洞」探索链路</div>
+      </div>`;
+    } else {
+      hdr.style.display = 'none';
+      tabs.style.display = 'none';
+      canvas.innerHTML = '<div class="empty-state">暂无 SRC 会话数据</div>';
+    }
+    return;
+  }
+
+  // 会话存在但未建立 engagement
+  if (!session.engagement && !(session.assets || []).length) {
+    hdr.style.display = 'none';
+    tabs.style.display = 'none';
+    canvas.innerHTML = `<div class="empty-state" style="padding:80px 20px">
+      <div style="font-size:32px;margin-bottom:12px">🛡️</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">SRC 探索尚未开始</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.8">调用 <code>src_start_engagement</code> 登记平台、授权范围和授权依据</div>
+    </div>`;
+    return;
+  }
+
+  hdr.style.display = '';
+  tabs.style.display = '';
+
+  // 顶栏
+  const scope0 = session.scope?.[0] || session.platform || '—';
+  document.getElementById('hdr-url').textContent = scope0;
+  document.getElementById('hdr-url').href = /^https?:\/\//.test(scope0) ? scope0 : 'http://' + scope0;
+  document.getElementById('hdr-platform').textContent = session.platform;
+  document.getElementById('hdr-purpose').textContent = `目的：对 ${scope0} 进行安全测试，记录探索链路。`;
+  document.getElementById('hdr-meta').innerHTML = [
+    `<span class="stat">意图 <b>${session.intents?.length || 0}</b></span>`,
+    `<span class="stat">事实 <b>${session.facts?.length || 0}</b></span>`,
+    `<span class="stat">漏洞 <b>${session.findings?.length || 0}</b></span>`,
+    `<span class="stat">资产 <b>${session.assets?.length || 0}</b></span>`,
+  ].join('');
+  document.getElementById('hdr-auth').textContent = session.authorization ? `授权：${session.authorization}` : '';
+
+  // 计数
+  document.getElementById('cnt-findings').textContent = session.findings?.length || 0;
+  document.getElementById('cnt-assets').textContent = session.assets?.length || 0;
+
+  // Tab 切换
+  if (CURRENT_TAB === 'graph') renderGraph(session, canvas);
+  else if (CURRENT_TAB === 'findings') renderFindings(session, canvas);
+  else if (CURRENT_TAB === 'assets') renderAssets(session, canvas);
+  else if (CURRENT_TAB === 'report') renderReport(session, canvas);
+}
+
+function renderGraph(session, canvas) {
+  const tree = buildTree(session);
+  const layout = computeLayout(tree);
+  const { positions, nodeW, nodeH } = layout;
+  const padX = 60, padTop = 30, padBottom = 60;
+
+  // 合并自动布局与用户手动拖动的位置
+  currentPositions = new Map();
+  for (const [id, pos] of positions) {
+    currentPositions.set(id, customPositions.get(id) || { ...pos });
+  }
+  layoutInfo = { padX, padTop, nodeW, nodeH, children: tree.children };
+
+  // 计算画布尺寸（考虑自定义位置可能超出自动布局范围）
+  let maxX = 0, maxY = 0;
+  for (const [, p] of currentPositions) {
+    maxX = Math.max(maxX, p.x + p.w);
+    maxY = Math.max(maxY, p.y + p.h);
+  }
+  canvas.style.width = (maxX + padX * 2) + 'px';
+  canvas.style.height = (maxY + padTop + padBottom) + 'px';
+
+  // SVG 边
+  let svg = `<svg class="edges" width="${maxX + padX * 2}" height="${maxY + padTop + padBottom}">`;
+  svg += '</svg>';
+
+  // HTML 节点
+  let html = '';
+  for (const [id, node] of tree.nodes) {
+    const p = currentPositions.get(id);
+    if (!p) continue;
+    const badges = node.badges.map(b => `<span class="badge ${b.cls}">${esc(b.text)}</span>`).join('');
+    html += `<div class="node type-${node.type}" data-id="${esc(id)}" style="left:${p.x + padX}px;top:${p.y + padTop}px">
+      <div class="node-row">
+        <div class="node-icon">${ICONS[node.type] || '📄'}</div>
+        <div class="node-body">
+          <div class="node-title">${esc(node.title)}</div>
+          ${node.sub ? `<div class="node-sub">${esc(node.sub)}</div>` : ''}
+          ${badges ? `<div class="node-badges">${badges}</div>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  canvas.innerHTML = svg + html;
+
+  // 绘制边（需要在 DOM 插入后操作 SVG）
+  drawEdges();
+
+  // 交互：hover 高亮 + 点击详情 + 拖拽
+  canvas.querySelectorAll('.node').forEach(el => {
+    const id = el.dataset.id;
+    el.addEventListener('mouseenter', () => highlightEdges(id, true));
+    el.addEventListener('mouseleave', () => highlightEdges(id, false));
+    el.addEventListener('click', () => {
+      if (justDragged) { justDragged = false; return; }
+      showDetail(tree.nodes.get(id));
+    });
+    setupNodeDrag(el, id);
+  });
+}
+
+// ── 边绘制（根据 currentPositions 重绘所有 SVG 边）──
+function drawEdges() {
+  const svg = document.querySelector('svg.edges');
+  if (!svg || !layoutInfo) return;
+  const { padX, padTop, nodeW, nodeH, children } = layoutInfo;
+  let content = '';
+  for (const [pid, kids] of children) {
+    const pp = currentPositions.get(pid);
+    if (!pp) continue;
+    for (const k of kids) {
+      const kp = currentPositions.get(k.id);
+      if (!kp) continue;
+      const x1 = pp.x + padX + nodeW / 2;
+      const y1 = pp.y + padTop + nodeH;
+      const x2 = kp.x + padX + nodeW / 2;
+      const y2 = kp.y + padTop;
+      const my = (y1 + y2) / 2;
+      const hl = highlightedNode === pid || highlightedNode === k.id;
+      content += `<path d="M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}" data-from="${pid}" data-to="${k.id}"${hl ? ' class="highlight"' : ''}/>`;
+      const label = EDGE_LABELS[k.edgeType] || '';
+      if (label) {
+        const lx = (x1 + x2) / 2, ly = my;
+        content += `<rect class="edge-label-bg" x="${lx - 14}" y="${ly - 8}" width="28" height="14" rx="3"/>`;
+        content += `<text class="edge-label" x="${lx}" y="${ly + 3}">${label}</text>`;
+      }
+    }
+  }
+  svg.innerHTML = content;
+}
+
+// ── 节点拖拽 ──
+function setupNodeDrag(el, id) {
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target.closest('button, a')) return;
+    const pos = currentPositions.get(id);
+    if (!pos) return;
+    dragState = {
+      id, el,
+      startX: e.clientX, startY: e.clientY,
+      origX: pos.x, origY: pos.y,
+      moved: false,
+    };
+    el.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  el.addEventListener('pointermove', (e) => {
+    if (!dragState || dragState.id !== id) return;
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+    if (!dragState.moved && Math.hypot(dx, dy) < 4) return;
+    dragState.moved = true;
+
+    const newX = dragState.origX + dx;
+    const newY = dragState.origY + dy;
+    const cur = currentPositions.get(id);
+    currentPositions.set(id, { ...cur, x: newX, y: newY });
+    customPositions.set(id, { ...cur, x: newX, y: newY });
+
+    el.style.left = (newX + layoutInfo.padX) + 'px';
+    el.style.top = (newY + layoutInfo.padTop) + 'px';
+    el.classList.add('dragging');
+
+    drawEdges();
+    expandCanvas(newX, newY);
+  });
+
+  const endDrag = () => {
+    if (!dragState || dragState.id !== id) return;
+    el.classList.remove('dragging');
+    if (dragState.moved) justDragged = true;
+    dragState = null;
+  };
+  el.addEventListener('pointerup', endDrag);
+  el.addEventListener('pointercancel', endDrag);
+}
+
+// 拖拽超出画布时自动扩展
+function expandCanvas(x, y) {
+  const canvas = document.getElementById('canvas');
+  const svg = document.querySelector('svg.edges');
+  if (!canvas || !svg || !layoutInfo) return;
+  const { nodeW, nodeH, padX, padTop } = layoutInfo;
+  const needW = x + padX + nodeW + 80;
+  const needH = y + padTop + nodeH + 80;
+  const curW = parseInt(canvas.style.width) || 0;
+  const curH = parseInt(canvas.style.height) || 0;
+  if (needW > curW) { canvas.style.width = needW + 'px'; svg.setAttribute('width', needW); }
+  if (needH > curH) { canvas.style.height = needH + 'px'; svg.setAttribute('height', needH); }
+}
+
+function highlightEdges(nodeId, on) {
+  highlightedNode = on ? nodeId : null;
+  drawEdges();
+  const canvas = document.getElementById('canvas');
+  canvas.querySelectorAll(`.node[data-id="${nodeId}"]`).forEach(n => {
+    n.classList.toggle('highlight', on);
+  });
+}
+
+// 重置布局：清除所有手动位置，恢复自动布局
+function resetLayout() {
+  customPositions.clear();
+  render();
+}
+
+// ── 列表视图 ──
+function renderFindings(session, canvas) {
+  const items = session.findings || [];
+  if (!items.length) { canvas.innerHTML = '<div class="empty-state">暂无确认漏洞</div>'; return; }
+  canvas.innerHTML = '<div class="list-view">' + items.map(f => `
+    <div class="list-item">
+      <div class="list-item-title">🐛 ${esc(f.title)}</div>
+      <div class="list-item-body">${esc(f.description)}</div>
+      <div class="list-item-meta">
+        <span class="badge badge-${esc(f.severity)}">${sevLabel(f.severity)}</span>
+        <span class="badge badge-asset">${esc(f.category || '漏洞')}</span>
+      </div>
+      ${f.reproSteps ? `<div class="list-item-body" style="margin-top:8px">复现步骤：\n${esc(f.reproSteps)}</div>` : ''}
+    </div>
+  `).join('') + '</div>';
+}
+
+function renderAssets(session, canvas) {
+  const items = session.assets || [];
+  if (!items.length) { canvas.innerHTML = '<div class="empty-state">暂无资产</div>'; return; }
+  canvas.innerHTML = '<div class="list-view">' + items.map(a => `
+    <div class="list-item">
+      <div class="list-item-title">🌐 ${esc(a.value)}</div>
+      <div class="list-item-body">${esc(a.note || a.type)}</div>
+      <div class="list-item-meta">
+        <span class="badge badge-${a.scopeStatus === 'in-scope' ? 'in-scope' : 'out-of-scope'}">${a.scopeStatus === 'in-scope' ? '在范围内' : '范围外'}</span>
+        <span class="badge badge-asset">${esc(a.type)}</span>
+      </div>
+    </div>
+  `).join('') + '</div>';
+}
+
+function renderReport(session, canvas) {
+  const findings = session.findings || [];
+  const scope = session.scope || [];
+  canvas.innerHTML = `<div class="list-view">
+    <div class="list-item">
+      <div class="list-item-title">📄 ${esc(session.platform)} SRC 安全测试报告</div>
+      <div class="list-item-body">测试目标：${scope.map(esc).join('、')}
+授权依据：${esc(session.authorization || '未声明')}
+测试时间：${new Date().toLocaleDateString('zh-CN')}</div>
+    </div>
+    ${findings.map(f => `
+    <div class="list-item">
+      <div class="list-item-title">${sevLabel(f.severity)}：${esc(f.title)}</div>
+      <div class="list-item-body">${esc(f.description)}
+
+复现步骤：
+${esc(f.reproSteps || '未提供')}</div>
+      <div class="list-item-meta"><span class="badge badge-${esc(f.severity)}">${sevLabel(f.severity)}</span></div>
+    </div>`).join('')}
+    ${!findings.length ? '<div class="empty-state">暂无确认漏洞，无法生成报告</div>' : ''}
+  </div>`;
+}
+
+// ── 详情弹层 ──
+function showDetail(node) {
+  if (!node) return;
+  const overlay = document.getElementById('detail-overlay');
+  const card = document.getElementById('detail-card');
+  const raw = node.raw || {};
+  const rows = [];
+  for (const [k, v] of Object.entries(raw)) {
+    if (v == null || v === '') continue;
+    const label = { id: 'ID', type: '类型', value: '值', note: '备注', scopeStatus: '范围状态', parentId: '父资产',
+      target: '目标', method: '测试方法', status: '状态', assetId: '关联资产', intentId: '关联意图',
+      kind: '事实类型', confidence: '置信度', detail: '详情', title: '标题', severity: '等级',
+      category: '分类', description: '描述', reproSteps: '复现步骤', scope: '范围', authorization: '授权' }[k] || k;
+    rows.push(`<div class="detail-row"><div class="label">${esc(label)}</div><div class="value">${esc(String(v))}</div></div>`);
+  }
+  card.innerHTML = `<button class="detail-close" onclick="document.getElementById('detail-overlay').classList.remove('show')">✕</button>
+    <h3>${ICONS[node.type] || '📄'} ${esc(node.title)}</h3>${rows.join('')}`;
+  overlay.classList.add('show');
+}
+document.getElementById('detail-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('show');
+});
+
+// ── Tab 切换 ──
+document.getElementById('tabs').addEventListener('click', e => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  CURRENT_TAB = btn.dataset.tab;
+  render();
+});
+
+// ── 重置布局 ──
+document.getElementById('reset-layout').addEventListener('click', resetLayout);
+
+// ── 启动 ──
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

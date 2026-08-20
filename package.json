@@ -1,0 +1,56 @@
+{
+  "name": "dsh-src",
+  "version": "0.2.0",
+  "description": "DSH SRC 授权漏洞研究模式：强制授权与逐方案审批、范围护栏、证据链、人工复现门禁和提交报告",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./src": "./lib/src.js",
+    "./preset-root": "./lib/preset-root.js",
+    "./view-model": "./lib/view-model.js",
+    "./client": "./lib/ui.client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "preset/**",
+    "rules/**",
+    "templates/**",
+    "scripts/**",
+    "ui/**",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "pack:local": "npm pack",
+    "install:preset": "node scripts/install.js",
+    "uninstall:preset": "node scripts/install.js --uninstall",
+    "viz": "node ui/server.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.1.0-rc.6 <0.2.0",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.6 <0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  },
+  "license": "MIT"
+}

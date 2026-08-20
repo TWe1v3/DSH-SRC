@@ -1,0 +1,12 @@
+# dsh-src bundle patch
+#
+# 在 dsh web 根配置中插入 dsh-src 条目，双重作用：
+# 1. ClientModuleRegistry 启动时发现 package.json 的 dsh.client 声明，
+#    在 /plugins/dsh-src/client.js 提供浏览器端 bundle（"探索图"标签）
+# 2. Cordis loader 将本包作为 function 插件加载（lib/index.js），
+#    注册 /src-graph-api 和 /src-graph 两条宿主路由
+#
+# SRC 工具集（dsh-src/src）仍由 preset 按会话加载，不受影响。
+- insert:
+    - id: dsh-src-ui
+      name: dsh-src

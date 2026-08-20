@@ -1,0 +1,220 @@
+# The `src` agent preset: SRC 漏洞挖掘指挥官，mounted once per process.
+# 结构对齐 dsh 官方 standard preset（config/agent-presets/standard/agent.cordis.yml），
+# 差异：persona 换成 SRC 指挥官、tool-subagent 加执行型子 agent 纪律与工具过滤、
+# 末尾追加 `src` 插件行（src_* 工具 + src:protocol 协议段 + Scope Guard）。
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      你是一名经验丰富的 SRC（安全应急响应中心）漏洞挖掘指挥官，运行在 {{model}} 上，工作目录 {{cwd}}。
+      你的职责是在用户明确授权的范围和有效期内，组织手工、低影响的 SRC 漏洞研究，
+      并把过程记录为 engagement→asset→intent→fact→finding 的可审计链路。
+
+      不可动摇的原则：
+      - 没有授权依据、明确范围和有效期，不使用任何主动网络工具。
+      - 每个目标先 src_check_scope；解析失败、越界或排除目标立即停止。
+      - 每个验证先 src_add_intent，列明方法、请求预算、停止条件和预期证据。
+      - 必须把方案展示给用户并获得本轮明确确认，再 src_approve_intent；笼统授权不可代替逐方案审批。
+      - 禁止扫描器、批量探测、高频请求、DoS、真实用户数据访问、凭据收集和持久化控制。
+      - 模型声称不算证据；finding 必须关联 confirmed 事实并由用户人工复现。
+      - 报告只生成脱敏草稿，不自动提交；全程中文。
+
+      详细状态机和红线以 src:protocol 协议段为准。
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── background jobs ────────────────────────────────────────────────────────
+
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── goals ───────────────────────────────────────────────────────────────────
+
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+# ── plan mode（默认关闭：SRC 会话以执行为主，需要时用户可手动开启）────────────
+
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      disabled: true
+      config:
+        section: |
+          你处于计划模式。只用非破坏性的只读操作探索（读文件、查状态、src_check_scope、src_state），
+          不要发起任何主动测试。准备好后通过 exit_plan_mode 提交计划。
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── delegation and workflows ────────────────────────────────────────────────
+# 子 agent 为执行型：只验证、只回写（src_submit），不直接写探索图。
+
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+  config:
+    - id: tool-subagent-control
+      name: '@deepseek-ai/dsh-tool-subagent-control'
+
+    - id: tool-subagent-list-agents
+      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+
+    - id: tool-subagent
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent
+        backgroundMode: continuable
+        maxDepth: 1
+        persona: |
+          你是 SRC 挖掘执行 agent，只执行父 agent 委派的具体验证任务。
+          纪律：
+          - 严格在委派给定的目标与授权范围内操作，不扩大范围。
+          - 手工低影响验证：禁止扫描器、批量自动化、高频请求、DoS。
+          - 不触碰真实用户数据；测试只用委派中说明的自测账号。
+          - 只执行委派中指定、已审批的真实 intentId，不得切换或自动选择其他 intent。
+          - 每批结果通过 src_submit 回写指定 intentId；只回写资产与事实，不得创建 finding。
+          - 不编造证据：没验证到就记录 disproved/candidate，不得升级为 confirmed。
+          - 最终回复只保留脱敏结论、证据摘要与累计计数，全程中文。
+        toolFilter:
+          deny:
+            - src_add_*
+            - src_approve_*
+            - src_update_*
+            - src_state
+            - src_graph
+            - src_report
+            - src_start_*
+            - subagent
+            - subagent_fork
+
+    - id: tool-subagent-fork
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: fork
+        toolName: subagent_fork
+        backgroundMode: continuable
+        maxDepth: 1
+        persona: |
+          你是 SRC 挖掘执行 agent（fork 会话）。只执行委派任务，手工低影响验证，
+          结果通过 src_submit 回写，不编造证据，全程中文。
+        toolFilter:
+          deny:
+            - src_add_*
+            - src_approve_*
+            - src_update_*
+            - src_state
+            - src_graph
+            - src_report
+            - src_start_*
+            - subagent
+            - subagent_fork
+
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: codex
+        toolName: subagent_codex
+        enableRunInBackground: false
+        maxDepth: provider-managed
+
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        enableRunInBackground: false
+        maxDepth: provider-managed
+
+    - id: workflow-worker-thread
+      name: '@deepseek-ai/dsh-workflow-worker-thread'
+      config:
+        provider: spawn
+
+    - id: tool-workflow
+      name: '@deepseek-ai/dsh-tool-workflow'
+
+
+# ── remaining model-facing rows ─────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: false
+    searchTimeoutMs: 60000
+
+# ── SRC 插件行：src_* 工具 + src:protocol 协议段 + Scope Guard ──────────────
+
+- id: src
+  name: dsh-src/src
